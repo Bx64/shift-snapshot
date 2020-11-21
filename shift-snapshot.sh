@@ -41,7 +41,7 @@ if [ ! -f "snapshot/counter.json" ]; then
   sudo chown postgres:${USER:=$(/usr/bin/id -run)} snapshot
   sudo chmod -R 777 snapshot
 fi
-SNAPSHOT_DIRECTORY=~/shift-lisk/
+SNAPSHOT_DIRECTORY=snapshot/
 
 
 NOW=$(date +"%d-%m-%Y - %T")
@@ -49,14 +49,31 @@ NOW=$(date +"%d-%m-%Y - %T")
 
 create_snapshot() {
   export PGPASSWORD=$DB_PASS
+  echo " + Stopping shift-lisk"
+  echo "--------------------------------------------------"
+  echo "..."
+  pm2 stop app
+  ~/shift-lisk/shift_manager.bash stop
+
   echo " + Creating snapshot"
   echo "--------------------------------------------------"
   echo "..."
-  sudo su postgres -c "pg_dump -Fc $DB_NAME > $SNAPSHOT_DIRECTORY'blockchain.db.gz'"
+  pg_dump $DB_NAME | gzip > $SNAPSHOT_DIRECTORY'blockchain.db.gz'
   blockHeight=`psql -d $DB_NAME -U $DB_USER -h localhost -p 5432 -t -c "select height from blocks order by height desc limit 1;"`
   dbSize=`psql -d $DB_NAME -U $DB_USER -h localhost -p 5432 -t -c "select pg_size_pretty(pg_database_size('$DB_NAME'));"`
 
   echo "$NOW -- OK snapshot created successfully at block$blockHeight ($dbSize)."
+  echo "--------------------------------------------------"
+  echo "..."
+  echo " + Restarting shift-lisk"
+  echo "..."
+  pm2 start app
+  ~/shift-lisk/shift_manager.bash start
+
+  echo " + Moving snapshot to ~/shift-lisk"
+  echo "--------------------------------------------------"
+  echo "..."
+  mv snapshot/blockchain.db.gz ~/shift-lisk/blockchain.db.gz
 }
 
 restore_snapshot(){
@@ -70,23 +87,14 @@ restore_snapshot(){
   fi
   echo "Snapshot to restore = $SNAPSHOT_FILE"
 
-  read -p "Please stop node app.js first, are you ready (y/n)? " -n 1 -r
-  if [[ ! $REPLY =~ ^[Yy]$ ]]
-  then
-     echo "***** Please stop node.js first.. then execute restore again"
-     echo " "
-     exit 1
-  fi
-
 #snapshot restoring..
   ~/shift-lisk/shift_manager.bash rebuild
-  n
 
   if [ $? != 0 ]; then
     echo "X Failed to restore."
     exit 1
   else
-    echo "OK snapshot restored successfully."
+    echo "OK - snapshot restored successfully."
   fi
 
 }
@@ -101,7 +109,7 @@ case $1 in
   restore_snapshot
   ;;
 "hello")
-  echo "Hello my friend - $NOW"
+  echo "Hello Shift - $NOW"
   ;;
 "help")
   echo "Available commands are: "

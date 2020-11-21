@@ -30,6 +30,10 @@ cd shift-snapshot/
 chmod +x shift-snapshot.sh
 ./shift-snapshot.sh help
 ```
+If you do not use **pm2** to monitor your node, you should comment or remove lines **55** & **70** by editing the script:
+```
+nano shift-snapshot.sh
+```
 
 ## Available commands
 
