@@ -1,10 +1,6 @@
 #!/bin/bash
-VERSION="0.6"
+VERSION="0.4"
 
-# CONFIG
-SHIFT_DIRECTORY=~/shift-lisk
-
-# EXPORT
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LANGUAGE=en_US.UTF-8
@@ -13,183 +9,86 @@ export LANGUAGE=en_US.UTF-8
 #= snapshot.sh v0.2 created by mrgr                         =
 #= Please consider voting for delegate mrgr                 =
 #============================================================
-
 #============================================================
-#= snapshot.sh v0.6 created by Mx                           =
-#= Please consider voting for delegate 'mx'                 =
+#= snapshot.sh v0.3 created by Mx                           =
+#= Please consider voting for delegate Mx                   =
 #============================================================
-
-# markdown
-redTextOpen="\e[31m"
-greenTextOpen="\e[1;32m"
-boldTextOpen="\e[1m"
-highlitedTextOpen="\e[44m"
-colorTextClose="\e[0m"
-
+#============================================================
+#= snapshot.sh v0.4 created by bfx                          =
+#= Please consider voting for delegate bfx                  =
+#============================================================
 echo " "
 
-if [ ! -f ${SHIFT_DIRECTORY}/app.js ]; then
-  echo -e "${redTextOpen}Error: No shift-lisk installation detected in the directory ${SHIFT_DIRECTORY}${colorTextClose}"
-  echo -e "Please, change config: ${boldTextOpen}nano shift-snapshot.sh${colorTextClose}"
-  echo "or install: https://github.com/ShiftNrg/shift-lisk"
+if [ ! -f ../shift-lisk/app.js ]; then
+  echo "Error: No shift installation detected. Exiting."
   exit 1
 fi
 
 if [ "\$USER" == "root" ]; then
-  echo -e "${redTextOpen}Error: shift-lisk should not be run be as root. Exiting.${colorTextClose}"
+  echo "Error: SHIFT should not be run be as root. Exiting."
   exit 1
 fi
 
-SHIFT_CONFIG=${SHIFT_DIRECTORY}/config.json
+SHIFT_CONFIG=~/shift-lisk/config.json
 DB_NAME="$(grep "database" $SHIFT_CONFIG | cut -f 4 -d '"')"
 DB_USER="$(grep "user" $SHIFT_CONFIG | cut -f 4 -d '"')"
 DB_PASS="$(grep "password" $SHIFT_CONFIG | cut -f 4 -d '"' | head -1)"
 SNAPSHOT_COUNTER=snapshot/counter.json
-SNAPSHOT_LOG=snapshot/snapshot.log
 if [ ! -f "snapshot/counter.json" ]; then
   mkdir -p snapshot
-  sudo chmod +x shift-snapshot.sh
+  sudo chmod a+x shift-snapshot.sh
   echo "0" > $SNAPSHOT_COUNTER
   sudo chown postgres:${USER:=$(/usr/bin/id -run)} snapshot
   sudo chmod -R 777 snapshot
 fi
-SNAPSHOT_DIRECTORY=snapshot/
+SNAPSHOT_DIRECTORY=~/shift-lisk/
 
 
 NOW=$(date +"%d-%m-%Y - %T")
 ################################################################################
 
-ctrlc_count=0
-
-function no_ctrlc() # intercept user input
-{
-  let ctrlc_count++
-  echo
-  if [[ $ctrlc_count == 1 ]]; then
-    echo -e "${redTextOpen}!Warning. At shutdown, errors in the database are possible.${colorTextClose}"
-    # echo "If you really want to exit, press Ctrl+C again."
-  else
-     echo -e "${redTextOpen}Exit.${colorTextClose}"
-     exit
-  fi
-}
-
 create_snapshot() {
   export PGPASSWORD=$DB_PASS
-  echo -e " ${boldTextOpen}+ Creating snapshot${colorTextClose}"
+  echo " + Creating snapshot"
   echo "--------------------------------------------------"
   echo "..."
-  snapshotName="shift_db$NOW.snapshot.tar"
-  snapshotLocation="$SNAPSHOT_DIRECTORY'$snapshotName'"
-  trap no_ctrlc SIGINT # intercept user input
-  sudo su postgres -c "pg_dump -Ft $DB_NAME > $snapshotLocation"
+  sudo su postgres -c "pg_dump -Fc $DB_NAME > $SNAPSHOT_DIRECTORY'blockchain.db.gz'"
   blockHeight=`psql -d $DB_NAME -U $DB_USER -h localhost -p 5432 -t -c "select height from blocks order by height desc limit 1;"`
   dbSize=`psql -d $DB_NAME -U $DB_USER -h localhost -p 5432 -t -c "select pg_size_pretty(pg_database_size('$DB_NAME'));"`
-  trap -- SIGINT # release interception user input
 
-  if [ $? != 0 ]; then
-    echo -e "${redTextOpen}X Failed to create snapshot.${colorTextClose}" | tee -a $SNAPSHOT_LOG
-    exit 1
-  else
-    myFileSizeCheck=$(du -h "$SNAPSHOT_DIRECTORY$snapshotName" | cut -f1)
-    echo -e "$NOW -- ${greenTextOpen}OK snapshot created successfully${colorTextClose} at block$blockHeight ($myFileSizeCheck)." | tee -a $SNAPSHOT_LOG
-  fi
-
-}
-
-create_compressed_snapshot() {
-  export PGPASSWORD=$DB_PASS
-  echo -e " ${boldTextOpen}+ Creating compressed snapshot${colorTextClose}"
-  echo "--------------------------------------------------"
-  echo "..."
-  snapshotName="shift_db$NOW.snapshot.sql.gz"
-  snapshotLocation="$SNAPSHOT_DIRECTORY'$snapshotName'"
-  trap no_ctrlc SIGINT # intercept user input
-  sudo su postgres -c "pg_dump -Fp -Z 1 $DB_NAME > $snapshotLocation"
-  blockHeight=`psql -d $DB_NAME -U $DB_USER -h localhost -p 5432 -t -c "select height from blocks order by height desc limit 1;"`
-  dbSize=`psql -d $DB_NAME -U $DB_USER -h localhost -p 5432 -t -c "select pg_size_pretty(pg_database_size('$DB_NAME'));"`
-  trap -- SIGINT # release interception user input
-
-  if [ $? != 0 ]; then
-    echo -e "${redTextOpen}X Failed to create compressed snapshot.${colorTextClose}" | tee -a $SNAPSHOT_LOG
-    exit 1
-  else
-    myFileSizeCheck=$(du -h "$SNAPSHOT_DIRECTORY$snapshotName" | cut -f1)
-    echo -e "$NOW -- ${greenTextOpen}OK compressed snapshot created successfully${colorTextClose} at block$blockHeight ($myFileSizeCheck)." | tee -a $SNAPSHOT_LOG
-  fi
-
+  echo "$NOW -- OK snapshot created successfully at block$blockHeight ($dbSize)."
 }
 
 restore_snapshot(){
-  echo -e " ${boldTextOpen}+ Restoring snapshot${colorTextClose}"
+  echo " + Restoring snapshot"
   echo "--------------------------------------------------"
-  SNAPSHOT_FILE=`ls -t snapshot/shift_db* | head  -1`
+  SNAPSHOT_FILE=`ls -t ~/shift-lisk/blockchain.db.gz | head  -1`
   if [ -z "$SNAPSHOT_FILE" ]; then
-    echo -e "${redTextOpen}!No snapshot to restore, please consider create it first${colorTextClose}"
-    echo -e "Using: bash shift-snapshot.sh create"
+    echo "****** No snapshot to restore, please consider create it first"
     echo " "
     exit 1
   fi
-  echo -e "Snapshot to restore = $SNAPSHOT_FILE"
+  echo "Snapshot to restore = $SNAPSHOT_FILE"
 
-  read -p "$(echo -e ${highlitedTextOpen}"shift-lisk node will be stopped, are you ready (y/n)?"${colorTextClose})  " -r
-
-  if [[ ! $REPLY =~ ^[Yyнд]$ ]]
+  read -p "Please stop node app.js first, are you ready (y/n)? " -n 1 -r
+  if [[ ! $REPLY =~ ^[Yy]$ ]]
   then
-     echo -e "${redTextOpen}!Please stop app.js first. Then execute restore again${colorTextClose}"
+     echo "***** Please stop node.js first.. then execute restore again"
      echo " "
      exit 1
   fi
 
-  bash ${SHIFT_DIRECTORY}/shift_manager.bash stop
-
-  trap no_ctrlc SIGINT # intercept user input
-
-  # snapshot restoring
-  export PGPASSWORD=$DB_PASS
-  if [[ $SNAPSHOT_FILE == *"sql.gz"* ]]; then
-    # drop db
-    res=$(sudo -u postgres dropdb --if-exists "$DB_NAME" 2> /dev/null)
-    res=$(sudo -u postgres createdb -O "$DB_USER" "$DB_NAME" 2> /dev/null)
-    res=$(sudo -u postgres psql -t -c "SELECT count(*) FROM pg_database where datname='$DB_NAME'" 2> /dev/null)
-
-    if [[ $res -eq 1 ]]; then
-      echo "√ Database reset successfully."
-    else
-      echo "X Failed to create Postgresql database."
-      exit 1
-    fi
-
-    echo -e "\n${boldTextOpen}Compressed snapshot restoring started${colorTextClose}"
-    echo "Please keep calm and don't push the button :)"
-
-    # restore dump
-    gunzip -fcq "$SNAPSHOT_FILE" | psql -d $DB_NAME -U $DB_USER -h localhost -q &> /dev/null
-  else
-    echo -e "\n${boldTextOpen}Snapshot restoring started${colorTextClose}"
-    echo "Please keep calm and don't push the button :)"
-    # psql -d $DB_NAME -U $DB_USER -h localhost -q -f "$SNAPSHOT_FILE" &> /dev/null
-    pg_restore -d $DB_NAME "$SNAPSHOT_FILE" -U $DB_USER -h localhost -c -n public
-  fi
-
-  trap -- SIGINT # release interception user input
+#snapshot restoring..
+  ~/shift-lisk/shift_manager.bash rebuild
+  n
 
   if [ $? != 0 ]; then
-    echo -e "${redTextOpen}X Failed to restore.${colorTextClose}"
+    echo "X Failed to restore."
     exit 1
   else
-    echo -e "${greenTextOpen}OK snapshot restored successfully.${colorTextClose}"
+    echo "OK snapshot restored successfully."
   fi
 
-  bash ${SHIFT_DIRECTORY}/shift_manager.bash start
-
-}
-
-show_log(){
-  echo " + Snapshot Log"
-  echo "--------------------------------------------------"
-  cat snapshot/snapshot.log
-  echo "--------------------------------------------------END"
 }
 
 ################################################################################
@@ -198,37 +97,21 @@ case $1 in
 "create")
   create_snapshot
   ;;
-"create_compressed")
-  create_compressed_snapshot
-  ;;
 "restore")
   restore_snapshot
   ;;
-"verify")
-  echo "Hello my friend - $NOW"
-  ;;
-"create_verified")
-  echo "Hello my friend - $NOW"
-  ;;
-"log")
-  show_log
-  ;;
 "hello")
   echo "Hello my friend - $NOW"
-  ;;
-"test")
-  start_test
   ;;
 "help")
   echo "Available commands are: "
   echo "  create   - Create new snapshot"
   echo "  restore  - Restore the last snapshot available in folder snapshot/"
-  echo "  log      - Display log"
   ;;
 *)
   echo "Error: Unrecognized command."
   echo ""
-  echo "Available commands are: create, restore, log, help"
+  echo "Available commands are: create, restore, help"
   echo "Try: bash shift-snapshot.sh help"
   ;;
 esac
